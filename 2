@@ -1,0 +1,215 @@
+cangku
+======
+
+#include //51系列单片机定义文件
+#define uchar unsigned char //定义无符号字符
+#define uint unsigned int //定义无符号整数
+void delay(uint); //声明延时函数
+void main(void)
+{ 
+uint i;
+uchar temp; 
+while(1)
+{
+temp=0x01;
+for(i=0;i<8;i++) //8个流水灯逐个闪动
+{
+P1=~temp;
+delay(100); //调用延时函数
+temp<<=1;
+}
+temp=0x80;
+for(i=0;i<8;i++) //8个流水灯反向逐个闪动
+{
+P1=~temp;
+delay(100); //调用延时函数
+temp>>=1;
+}
+temp=0xFE;
+for(i=0;i<8;i++) //8个流水灯依次全部点亮
+{
+P1=temp;
+delay(100); //调用延时函数
+temp<<=1;
+}
+temp=0x7F;
+for(i=0;i<8;i++) //8个流水灯依次反向全部点亮
+{
+P1=temp;
+delay(100); //调用延时函数
+temp>>=1;
+}
+}
+}
+void delay(uint t) //定义延时函数
+{
+register uint bt;
+for(;t;t--)
+for(bt=0;bt<255;bt++);
+}
+
+
+#include
+#include
+#include
+#define uchar unsigned char
+#define uint unsigned int
+#define TimeDelay 60000
+void delay(uint n);
+void Flash0a(void);
+void Flash0b(void);
+void Flash1a(void);
+void Flash1b(void);
+void Flash2a(void);
+void Flash2b(void);
+void Flash3a(void);
+void Flash3b(void);
+/************************************************************
+*Function: 主函数
+*parameter:
+*Return:
+*Modify:
+*************************************************************/
+void main(void)
+{
+while(1)
+{
+Flash1b();
+Flash1a();
+
+delay(TimeDelay);
+delay(TimeDelay);
+
+Flash0b();
+Flash0a();
+
+Flash2b();
+Flash2a();
+
+Flash1b();
+Flash1a();
+
+Flash3b();
+Flash3a();
+}
+}
+
+void delay(uint n)
+{
+while(n!=0)
+{
+n--;
+}
+}
+void Flash0a(void)
+{
+uchar i;
+uchar Temp;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P0 = ~Temp;
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P0 = 0xff; 
+}
+void Flash0b(void)
+{
+uchar i;
+uchar Temp;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P0 = Temp; 
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P0 = 0;
+}
+void Flash1a(void)
+{
+uchar i;
+uchar Temp;
+P1 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P1 = ~Temp;
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P1 = 0xff;
+}
+void Flash1b(void)
+{
+uchar i;
+uchar Temp;
+P1 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P1 = Temp; 
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P1 = 0;
+}
+void Flash2a(void)
+{
+uchar i;
+uchar Temp;
+P2 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P2 = ~Temp;
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P2 = 0xff;
+}
+void Flash2b(void)
+{
+uchar i;
+uchar Temp;
+P2 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P2 = Temp; 
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P2 = 0;
+}
+void Flash3a(void)
+{
+uchar i;
+uchar Temp;
+P3 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P3 = ~Temp;
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P3 = 0xff;
+}
+void Flash3b(void)
+{
+uchar i;
+uchar Temp;
+P3 = 1;
+Temp = 0x80;
+for(i=0;i<8;i++)
+{
+P3 = Temp; 
+delay(TimeDelay);
+Temp = Temp >> 1;
+}
+P3 = 0;
+}
+
+ 
