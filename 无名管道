@@ -1,0 +1,97 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <termios.h>
+
+
+#define FIFO_NAME "/tmp/my_fifo"
+#define BUFFER_SIZE PIPE_BUF
+
+static struct termios oldt;
+
+//restore terminal settings
+void restore_terminal_settings(void)
+{
+    tcsetattr(0, TCSANOW, &oldt);  /* Apply saved settings */
+}
+
+//make terminal read 1 char at a time
+void disable_waiting_for_enter(void)
+{
+    struct termios newt;
+    
+    //Save terminal settings
+    tcgetattr(0, &oldt); 
+    //init new settings
+    newt = oldt;  
+    //change settings
+    newt.c_lflag &= ~(ICANON | ECHO);
+    //apply settings
+    tcsetattr(0, TCSANOW, &newt);
+    //make sure settings will be restored when program ends
+    atexit(restore_terminal_settings);
+}
+
+int main()
+{
+    int pipe_fd;
+    int res;
+
+    char buffer[BUFFER_SIZE + 1];
+    memset(buffer, '\0', sizeof(buffer));
+    
+    //if the pipe file do not exist
+    if (access(FIFO_NAME, F_OK) == -1)
+    {
+        //creat FIFO pipe file
+        res = mkfifo(FIFO_NAME, 0777);
+        if (res != 0)
+        {
+            fprintf(stderr, "Could not create fifo %s\n", FIFO_NAME);
+            exit(EXIT_FAILURE);
+        }
+    }
+    
+    //open FIFO pipe file.
+    //this will be brocked until some one open another end point(read-point) of this pipe
+    pipe_fd = open(FIFO_NAME, O_WRONLY);
+    
+    //if FIFO pipe file open sucessfully
+    if (pipe_fd != -1)
+    {
+        printf("input something and press RETURN\n");
+        char ch;
+        
+        disable_waiting_for_enter();
+        
+        while ((ch = getchar()) != '\n') 
+        {
+            buffer[0] = ch;
+            
+            //write data into pipe 
+            res = write(pipe_fd, buffer, BUFFER_SIZE);
+            
+            if (res == -1)
+            {
+                fprintf(stderr, "Write error on pipe\n");
+                exit(EXIT_FAILURE);
+            }
+            
+        }
+        
+        //close FIFO pipe file descriptor
+        close(pipe_fd);
+    }
+    else
+    {
+        exit(EXIT_FAILURE);
+    }
+    
+    printf("Process %d finish\n", getpid());
+    exit(EXIT_SUCCESS);
+}
