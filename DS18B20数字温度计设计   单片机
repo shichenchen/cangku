@@ -1,0 +1,360 @@
+#include<reg51.h>
+#include<string.h>
+#define uchar unsigned char
+#define uint  unsigned int
+#define OSC 12000000			//晶振频率
+#define BAUDRATE 9600	    //波特率
+
+sbit rs=P2^0;
+sbit rw=P2^1;
+sbit e=P2^2;					//1602的三个控制端
+sbit dq=P1^0;					//DS18B20端口
+sbit bj=P1^3;					//声光报警控制端
+sbit high_test_temp_up=P1^4;	//增加高温度报警限
+sbit high_test_temp_down=P1^5;	//减小高温度报警限
+sbit low_test_temp_up=P1^6;		//增加低温度报警限
+sbit low_test_temp_down=P1^7;	//减小低温度报警限
+sbit beiguang=P2^3;			//1602背光灯控制端
+sbit control1=P2^5;				//控制一端（假设：降温设备）
+sbit control2=P2^6;                             //控制二端（假设：加热设备）
+sbit control3=P2^5;                             //控制三端（假设：降温设备）
+sbit control4=P2^6;                             //控制四端（假设：加热设备）
+uint temp;					//存放读到的16位温度信息
+uchar bai,shi,ge,xiaoshu,flag;	    //温度值的各位数值和符号标志位
+uchar high_temp,low_temp;		//读取DS18B20中温度信息高低字节
+uchar high_test_temp=0x1c;	    //初始高温28度
+uchar low_test_temp=0x08;      //初始低温8度
+uchar code mytab0[8]={0x10,0x06,0x09,0x08,0x08,0x08,0x09,0x06};//自定义的摄氏度符号
+uchar code mytab1[8]={0x00,0x1f,0x0a,0x1f,0x0a,0x0a,0x0a,0x12};	//自定义开
+uchar code mytab2[8]={0x11,0x0a,0x1f,0x04,0x1f,0x04,0x0a,0x11};	//自定义关
+void delay_1602();				//1602的延时函数
+void fbusy();					//1602检查忙函数
+void init_1602();				//1602初始化函数
+void wc51r(uchar j);			//1602写命令函数
+void wc51ddr(uchar j);			//1602写数据函数
+void writecgram();				//自定义符号写入1602中
+void display();					//温度信息显示函数
+
+void delay_18b20(uchar z);		//DS18B20的延时函数
+void init_18b20();				//DS18B20初始化函数
+uchar ow_reset();				//DS18B20的复位函数
+void write_byte(uchar dat);		//DS18B20的写函数
+uchar read_byte();				//DS18B20的读函数
+void read_temp();				//读DS18B20温度函数
+void convert_temp();			//温度转换函数
+void test_temp();				//温度检测函数
+
+void test_anjian();				//检测有没有按键按下想要修改温度报警限
+void init_cxk();				//串行口初始化
+/********************1602显示部分***************************/
+void delay_1602()	      //1602的延时函数
+{					  
+	uchar y;
+	for(y=0;y<0xff;y++){;}
+}
+
+void fbusy()	          //检查忙函数
+{
+	P0=0xff;
+	rs=0;
+	rw=1;
+	e=1;
+	e=0;
+	while(P0&0x80)
+	{
+		e=0;
+		e=1;
+	}
+	delay_1602();
+}
+
+void writecgram()	      //自定义符号写入1602中
+{
+	uchar i;
+	wc51r(0x40);	      //设置字库命令，地址为0x00
+	for(i=0;i<8;i++)
+			wc51ddr(mytab0[i]);
+	wc51r(0x48);		  //设置字库命令，地址为0x08
+	for(i=0;i<8;i++)
+			wc51ddr(mytab1[i]);
+	wc51r(0x50);		  //设置字库命令，地址为0x10
+	for(i=0;i<8;i++)
+			wc51ddr(mytab2[i]);		
+}
+
+void init_1602()   	  //1602初始化函数
+{
+    wc51r(0x01);       //清屏
+    wc51r(0x38);	      //使用8位数据，显示两行，使用5×7的字型
+    wc51r(0x0c);       //显示器开，光标开，字符不闪烁。
+    wc51r(0x06);	      //字符不动，光标自动右移
+    beiguang=0;	      //打开背光显示
+	writecgram();
+}
+
+void wc51r(uchar j)       //1602写命令函数
+{
+	fbusy(); 
+	e=0;
+    rs=0;
+    rw=0;
+	e=1;
+    P0=j;
+    e=0;
+    delay_1602();
+}
+
+void wc51ddr(uchar j)     //1602写数据函数
+{
+	fbusy();
+	e=0;
+    rs=1;
+    rw=0;
+	e=1;
+    P0=j;
+    e=0;
+    delay_1602();
+}
+				  	   
+void display()		      //温度信息显示函数：TEMP=温度℃
+{
+	wc51r(0x80);
+	wc51ddr(0x43);
+	wc51ddr(0x43);
+	wc51ddr(0x32);
+	wc51ddr(0x32);		//WF25
+	wc51r(0x85);
+	wc51ddr(0x48);
+	wc51ddr(0x3d);		 //H=
+	wc51ddr(high_test_temp/10+0x30);
+	wc51ddr(high_test_temp%10+0x30);
+	wc51ddr(0x00);
+	wc51r(0x8b);
+	wc51ddr(0x4c);
+	wc51ddr(0x3d);		 //L=
+	wc51ddr(low_test_temp/10+0x30);
+	wc51ddr(low_test_temp%10+0x30);
+	wc51ddr(0x00);
+    wc51r(0xc0);
+    wc51ddr(0x54);
+    wc51ddr(0x45);
+    wc51ddr(0x4d);
+    wc51ddr(0x50);
+    wc51ddr(0x3d);	    //显示TEMP=
+    if(flag==0)
+        wc51ddr(0x2b);
+    else 
+   	    wc51ddr(0x2d);   //显示温度正负号
+    if(bai!=0)		        //百位为0不显示
+	{ 
+		wc51ddr(bai+0x30);
+	}
+	wc51ddr(shi+0x30);	//显示温度的十位数
+    wc51ddr(ge+0x30);    //显示温度的个位数
+    wc51ddr(0x2e);	    //显示小数点
+    wc51ddr(xiaoshu+0x30);
+	wc51ddr(0x00);	    //自定义的摄氏度符号显示
+    wc51r(0xcc);		    //光标定位到第二行第13列
+	      //若设备工作则显示开，否则显示关
+	wc51ddr(0x01);
+
+	wc51r(0xcd);		    //光标定位到第二行第14列
+	
+}
+
+ /*****************************DS18B20部分***********************************/
+ void delay_18b20(uchar z)
+{ 
+    for(;z>0;z--);
+}
+
+void init_18b20()		     //DS18B20初始化函数
+{
+	ow_reset();			
+}
+
+uchar ow_reset()	         //DS18B20复位函数
+{
+	uchar reset;
+	dq=1;				
+	delay_18b20(1);	     //高电平稍作延时
+	dq=0;				
+	delay_18b20(50);	     //下拉数据线500us左右
+	dq=1;
+	delay_18b20(3);		 //释放数据线30us左右
+	reset=dq;
+	delay_18b20(25);	  
+	return(reset);
+}
+
+void write_byte(uchar dat)    //向单总线上写入一个字节
+{
+	uchar i;
+	for(i=0;i<8;i++)
+	{
+		dq=0;	  
+		dq=dat&0x01;	     //提取出最低位（每次只能发一位）
+		delay_18b20(5);	 //延时50us左右
+		dq=1;			 //数据线拉高
+		dat=dat>>1;		 //右移一位，准备发送下一位
+	}
+	delay_18b20(5);
+}
+
+uchar read_byte()	         //从单总线上读取一个字节
+{
+	uchar i, value=0;
+	for(i=0;i<8;i++)
+	{
+		value=value>>1;
+		dq=0;
+		dq=1;
+		delay_18b20(1);
+		if(dq==1)
+		value=value|0x80;	
+		delay_18b20(6);	  //延时60us左右，等待DS18B20完成一个读时序
+	}
+	return(value);
+}
+
+void read_temp()		      //读DS18B20温度函数
+{
+    ow_reset();
+	write_byte(0xcc);	      //跳过ROM
+	write_byte(0x44);	      //启动温度转换
+	ow_reset();
+	write_byte(0xcc);	      //跳过ROM
+	write_byte(0xbe);  	  //读内部RAM中内容
+	low_temp=read_byte();   //读温度低字节
+	high_temp=read_byte();  //读温度高字节
+}
+
+void convert_temp()		  //温度转换函数
+{	 
+	temp=high_temp*256+low_temp;
+	if(high_temp>0xf8)      //判断温度是否为负数
+	{
+		flag=1;
+		temp=(~temp)+1;
+	}
+	temp=temp*0.0625;	  //计算温度数值
+	bai=temp/100;		      //计算温度百位数
+	shi=temp/10%10;		  //计算温度十位数
+	ge=temp%10;			  //计算温度个位数
+	xiaoshu=(low_temp&0x0f)*10*0.0625;//温度低字节的低四位代表的是小数值（0.0625*16=1）
+}
+
+/*************************温度检测*******************************/
+void test_temp()
+{
+    uchar tem,a,b;
+	if(flag==1)
+		a=-1;
+	else a=1;
+	tem=a*(bai*100+shi*10+ge);
+	if(temp>=high_test_temp||temp<low_test_temp)
+	{
+		bj=0;
+		for(a=0;a<200;a++)
+			for(b=0;b<200;b++){}	
+	}						
+}
+
+/*************************按键检测*******************************/
+void delay()
+{
+	uchar u,d;
+	for(u=0;u<200;u++)
+		for(d=0;d<200;d++)
+		{}
+}
+void test_anjian()
+{
+	if(high_test_temp_up==0)
+	{
+		delay();
+		high_test_temp++;
+	}
+	else if(high_test_temp_down==0)
+	{
+		delay();
+		high_test_temp--;
+	}
+	else if(low_test_temp_up==0)
+	{
+		delay();
+		low_test_temp++;
+	}
+	else if(low_test_temp_down==0)
+	{
+		delay();
+		low_test_temp--;
+	}		
+}
+
+/*************************串口通信*****************************/
+void init_cxk()
+{
+	TMOD=0X20;  		  //T1工作在方式2，作为波特率发生器
+	SCON=0X50;			  //串口方式1，REN=1(允许接收)
+	PCON=0X80;			  //SMODE=1
+	TL1=256-(OSC/12/16/BAUDRATE);
+	TH1=256-(OSC/12/16/BAUDRATE);//设置定时器初值
+	TR1=1;				  //启动定时器，输出波特率时钟
+	RI=0;				  
+	TI=0;				  //确保程序开始时RI和TI无效
+	ES=1;				  //开串行口中断
+}
+
+/*************************主函数*******************************/
+void main()
+{
+	init_cxk();
+    init_1602();
+	init_18b20();
+	EA=1;				  //开总中断
+	EX0=1;				  //开外部中断0
+	EX1=1;				  //开外部中断1
+    while(1)
+    { 
+		bj=1;			  //在新的一次测温开始，蜂鸣器无效
+		flag=0;			  //在新的一次测温开始，flag清零
+		test_anjian();	      //检测有没有按键按下想要修改温度报警限
+	  	read_temp();	      //读DS18B20温度
+	    convert_temp();	  //转换温度
+   		display();		      //显示温度
+		test_temp();	      //检测温度
+   	}					  //为了实时检测温度，因此每次测温结束不用延时
+}
+
+/********************按键外部中断处理子程序********************/
+void int0() interrupt 0   //按键1动作进入
+{
+	uchar a,b;
+	for(a=0;a<255;a++)
+		for(b=0;b<255;b++){}
+	control1=~control1;   //降温设备工作（连接LED作为演示）	
+}
+
+void int1()	interrupt 2	  //按键1动作进入
+{
+	uchar a,b;
+	for(a=0;a<255;a++)
+		for(b=0;b<255;b++){}
+	control2=~control2;	  //加热设备工作（连接LED作为演示）
+}
+void int2() interrupt 6//按键1动作进入
+{
+	uchar a,b;
+	for(a=0;a<255;a++)
+		for(b=0;b<255;b++){}
+	control3=~control3;   //降温设备工作（连接LED作为演示）	
+}
+void int3()	interrupt 8	  //按键1动作进入
+{
+	uchar a,b;
+	for(a=0;a<255;a++)
+		for(b=0;b<255;b++){}
+	control4=~control4;	  //加热设备工作（连接LED作为演示）
+}
+
